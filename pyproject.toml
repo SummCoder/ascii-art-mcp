@@ -1,0 +1,14 @@
+[project]
+name = "ascii-art-generator"
+version = "1.0.0"
+description = "将图片转换为ASCII艺术的生成器"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]

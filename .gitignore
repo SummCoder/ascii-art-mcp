@@ -1,0 +1,37 @@
+# 忽略Python缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+env/
+
+# uv
+.uv/
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 输出文件
+*.txt
+output/
+
+# 图片文件（可选，如果不想提交测试图片）
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+# *.bmp
