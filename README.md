@@ -1,152 +1,136 @@
-# ASCII Art Generator
+# ASCII Art MCP Server
 
-一个功能强大的 ASCII 艺术生成器，可以将图片转换为由字符组成的艺术作品。
+这是一个给 Claude / MCP 生态用的“图片转 ASCII 艺术”云端工具。
 
-## 功能特点
+- 将本地图片转换为等宽字符的 ASCII 艺术，按 VS Code 深色主题渲染成 PNG。
+- 上传到 Supabase 公网存储并返回可分享的 URL，文件名含 UUID 不会覆盖原有文件。
+- 只暴露一个统一的 MCP 工具 `generate_ascii_image`，同时支持 Node.js (TypeScript) 与 Python (FastMCP) 运行时。
 
-- 🎨 **多种字符集**：simple、detailed、blocks、minimal、numbers
-- 🖼️ **图片导出**：保存为 PNG 图片，完美还原编辑器显示效果，保持原图长宽比
-- 🔆 **图像增强**：支持调整亮度和对比度
-- 🌈 **彩色支持**：支持彩色 ASCII 艺术
-- 💾 **文本输出**：可输出到文本文件或控制台
+## 目录结构
 
-## 安装
-
-```bash
-# 安装 uv
-pip install uv
-
-# 同步依赖
-uv sync
 ```
+.
+├── ascii-art-python/        # Python 版 (FastMCP)
+│   ├── main.py              # 核心 ASCII 生成器
+│   └── ascii_art_server.py  # MCP 入口，含 Supabase 上传
+├── ascii-art-nodejs/        # Node.js 版 (TypeScript)
+│   ├── src/index.ts         # MCP 入口，含 Supabase 上传
+│   └── build/index.js       # 构建产物
+└── docs/                    # 所有说明文档（已归档到此）
+```
+
+## 环境变量（两端一致）
+
+- `SUPABASE_URL`：Supabase 项目 URL
+- `SUPABASE_KEY`：Supabase Public Anon Key
+- `SUPABASE_BUCKET`：存储桶名称（可选，默认 `ascii-art-images`）
 
 ## 快速开始
 
-```bash
-# 基础转换
-uv run main.py scan.jpg
-
-# 保存为图片（推荐）
-uv run main.py scan.jpg --save-img output.png
-
-# 使用详细字符集
-uv run main.py scan.jpg -c detailed -w 120 --save-img output.png
-
-# 调整亮度和对比度
-uv run main.py scan.jpg -b 1.2 --contrast 1.5 --save-img output.png
-```
-
-## 命令行参数
-
-| 参数               | 说明                                             | 默认值   |
-| ------------------ | ------------------------------------------------ | -------- |
-| `image`            | 输入图片路径（必需）                             | -        |
-| `-w, --width`      | 输出宽度（字符数）                               | 100      |
-| `--height`         | 输出高度（字符数）                               | 自动计算 |
-| `-c, --charset`    | 字符集（simple/detailed/blocks/minimal/numbers） | simple   |
-| `-b, --brightness` | 亮度调整（>1 变亮，<1 变暗）                     | 1.0      |
-| `--contrast`       | 对比度调整（>1 增强，<1 降低）                   | 1.0      |
-| `--invert`         | 反转明暗                                         | False    |
-| `--color`          | 启用彩色输出                                     | False    |
-| `-o, --output`     | 保存为文本文件                                   | -        |
-| `--save-img`       | 保存为图片文件（PNG/JPG）                        | -        |
-
-## 字符集说明
-
-- **simple**: ` .:-=+*#%@` - 10 个字符，适合快速预览
-- **detailed**: 70+个字符，提供最详细的层次
-- **blocks**: ` ░▒▓█` - Unicode 块字符
-- **minimal**: ` .-+*@` - 5 个字符
-- **numbers**: ` 123456789` - 数字风格
-
-## 为什么推荐保存为图片？
-
-### 文本文件的问题
-
-- ❌ 字符间距可能失真（取决于字体和编辑器）
-- ❌ 不同设备显示效果不一致
-- ❌ 长宽比可能变形
-
-### 图片文件的优势
-
-- ✅ **完美还原**：使用等宽字体精确渲染
-- ✅ **长宽比准确**：自动计算字符尺寸，保持原图比例
-- ✅ **统一显示**：任何设备查看效果一致
-- ✅ **美观主题**：VS Code 深色主题配色
-- ✅ **易于分享**：直接发送图片，无需解释如何设置字体
-
-## Python 代码使用
-
-```python
-from main import ASCIIArtGenerator
-
-# 创建生成器
-generator = ASCIIArtGenerator(char_set='detailed')
-
-# 转换为文本
-ascii_art = generator.image_to_ascii('scan.jpg', width=100)
-print(ascii_art)
-
-# 保存为图片（推荐）
-generator.save_as_image('scan.jpg', 'output.png', width=120)
-
-# 调整参数
-generator.save_as_image(
-    'scan.jpg',
-    'output.png',
-    width=150,
-    brightness=1.2,
-    contrast=1.3
-)
-```
-
-## 技术说明
-
-### 图片生成原理
-
-1. **字体选择**：自动检测系统等宽字体（Windows: Consolas, macOS: Menlo, Linux: DejaVu Sans Mono）
-2. **尺寸计算**：精确测量字符像素尺寸，计算正确的行数
-3. **长宽比保持**：`高度 = 原图长宽比 × 宽度 × (字符宽度 / 字符高度)`
-4. **主题配色**：深色背景 `(40, 44, 52)` + 渐变文字颜色
-5. **智能渲染**：根据像素亮度调整字符颜色
-
-### 文本 vs 图片对比
-
-| 特性       | 文本文件   | 图片文件    |
-| ---------- | ---------- | ----------- |
-| 文件大小   | 几 KB      | 几百 KB     |
-| 长宽比     | 可能失真   | ✅ 完全准确 |
-| 显示一致性 | 依赖字体   | ✅ 完全一致 |
-| 编辑性     | 可编辑     | 不可编辑    |
-| 分享便利性 | 需说明字体 | ✅ 直接分享 |
-
-**建议**：快速测试用文本，最终输出用图片。
-
-## 示例
+### Node.js 版
 
 ```bash
-# 示例 1: 基础转换
-uv run main.py scan.jpg
-# 输出到控制台
-
-# 示例 2: 保存为高质量图片
-uv run main.py scan.jpg -c detailed -w 150 --save-img hd_output.png
-
-# 示例 3: 调整效果
-uv run main.py scan.jpg -b 1.3 --contrast 1.5 -w 120 --save-img enhanced.png
-
-# 示例 4: 同时保存文本和图片
-uv run main.py scan.jpg -o ascii.txt --save-img ascii.png
-
-# 示例 5: 彩色版本
-uv run main.py scan.jpg --color --save-img color.png
+cd ascii-art-nodejs
+npm install
+npm run build
+# 运行（本地测试）
+node build/index.js
 ```
 
-## 依赖项
+### Python 版
 
-- Python >= 3.8
-- Pillow >= 10.0.0
+```bash
+cd ascii-art-python
+uv pip install -e .
+uv run ascii_art_server.py
+```
+
+## MCP 工具：generate_ascii_image
+
+必填：
+
+- `image_path`：输入图片的**绝对路径**
+
+可选：
+
+- `width`：字符宽度，默认 100
+- `charset`：`simple | detailed | blocks | minimal | matrix`（默认 detailed）
+- `color_mode`：`gray | color`（默认 gray）
+- `brightness`：0.0–2.0，默认 1.0
+- `contrast`：0.0–2.0，默认 1.0
+- `invert`：是否反转明暗，默认 false
+- `font_size`：仅 Python 版可用，默认 10
+
+返回：
+
+- 上传后的公网 URL（文件名格式：`原名_UUID.png`）
+
+## 示例输出（源图：scan_test.jpg）
+
+源图：
+
+![scan_test.jpg](scan_test.jpg)
+
+有颜色输出：
+
+![scan_color.png](scan_color.png)
+
+无颜色输出：
+
+![scan_nocolor.png](scan_nocolor.png)
+
+## 路径安全
+
+- 仅接受**绝对路径**；相对路径会直接报错。
+
+## 配置示例（Claude Desktop）
+
+### 使用 npm 包（Node.js）
+
+```json
+{
+  "mcpServers": {
+    "ascii-art": {
+      "command": "npx",
+      "args": ["-y", "@frechen026/ascii-art-mcp-server@1.0.1"],
+      "env": {
+        "SUPABASE_URL": "https://xxx.supabase.co",
+        "SUPABASE_KEY": "your-public-anon-key",
+        "SUPABASE_BUCKET": "ascii-art-images"
+      }
+    }
+  }
+}
+```
+
+### 本地 Python 版
+
+```json
+{
+  "mcpServers": {
+    "ascii-art": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:\\PATH\\TO\\ascii-art-python",
+        "run",
+        "ascii_art_server.py"
+      ],
+      "env": {
+        "SUPABASE_URL": "https://xxx.supabase.co",
+        "SUPABASE_KEY": "your-public-anon-key",
+        "SUPABASE_BUCKET": "ascii-art-images"
+      }
+    }
+  }
+}
+```
+
+## 版本信息
+
+- Node.js 包：@frechen026/ascii-art-mcp-server（已发布 1.0.1 以修复缺失依赖）
+- Python：无需构建，直接 `uv run ascii_art_server.py`
 
 ## 许可证
 
-MIT License
+MIT
