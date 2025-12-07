@@ -1,6 +1,6 @@
 {
     "name": "@frechen026/ascii-art-mcp-server",
-    "version": "1.0.1",
+    "version": "1.0.4",
     "description": "MCP server for generating ASCII art from images - Convert images to text or PNG ASCII art with multiple character sets and color modes",
     "type": "module",
     "bin": {

@@ -49,7 +49,7 @@ uv run ascii_art_server.py
 
 必填：
 
-- `image_path`：输入图片的**绝对路径**
+- `image_path`：输入图片的**绝对路径** 或 **图片 URL**（http/https）
 
 可选：
 
@@ -65,6 +65,16 @@ uv run ascii_art_server.py
 
 - 上传后的公网 URL（文件名格式：`原名_UUID.png`）
 
+### 示例调用
+
+```json
+// 本地文件
+{ "image_path": "D:\\Pictures\\photo.jpg", "width": 120 }
+
+// 网络图片
+{ "image_path": "https://example.com/image.png", "charset": "detailed", "color_mode": "color" }
+```
+
 ## 示例输出（源图：scan_test.jpg）
 
 源图：
@@ -79,9 +89,12 @@ uv run ascii_art_server.py
 
 ![scan_nocolor.png](scan_nocolor.png)
 
-## 路径安全
+## 输入支持
 
-- 仅接受**绝对路径**；相对路径会直接报错。
+- ✅ **本地文件**：绝对路径（如 `D:\folder\image.jpg`）
+- ✅ **网络图片**：HTTP/HTTPS URL（如 `https://example.com/image.png`）
+
+> 相对路径不支持，会直接报错。
 
 ## 配置示例
 

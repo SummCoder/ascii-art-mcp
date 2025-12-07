@@ -9,6 +9,7 @@ import { readFile, unlink, writeFile } from "fs/promises";
 import { resolve, dirname, basename, extname, join, sep } from "path";
 import { randomUUID } from "crypto";
 import { tmpdir } from "os";
+import { URL } from "url";
 
 // Character sets for ASCII art
 const CHAR_SETS = {
@@ -72,15 +73,16 @@ async function uploadToSupabase(
 
 /**
  * Create ASCII art image
+ * @param imageInput - Can be a file path (string) or a Buffer
  */
 async function createAsciiImage(
-  imagePath: string,
+  imageInput: string | Buffer,
   outputPath: string,
   width: number,
   charset: string,
   colorMode: ColorMode
 ): Promise<{ width: number; height: number; size: number }> {
-  const image = sharp(imagePath);
+  const image = sharp(imageInput);
   const metadata = await image.metadata();
   
   if (!metadata.width || !metadata.height) {
@@ -207,6 +209,49 @@ ${chars.map(({ char, x, y, color }) =>
 }
 
 /**
+ * Check if string is a valid URL
+ */
+function isValidUrl(str: string): boolean {
+  try {
+    const url = new URL(str);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Download image from URL and return buffer
+ */
+async function downloadImage(url: string): Promise<{ buffer: Buffer; basename: string }> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+  }
+  
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.startsWith('image/')) {
+    throw new Error(`URL does not point to an image. Content-Type: ${contentType}`);
+  }
+  
+  const buffer = Buffer.from(await response.arrayBuffer());
+  
+  // Extract filename from URL or generate one
+  let urlBasename = 'image';
+  try {
+    const urlPath = new URL(url).pathname;
+    const urlFilename = urlPath.split('/').pop() || '';
+    if (urlFilename) {
+      urlBasename = urlFilename.replace(/\.[^.]+$/, '') || 'image';
+    }
+  } catch {
+    // Use default
+  }
+  
+  return { buffer, basename: urlBasename };
+}
+
+/**
  * Validate absolute path
  */
 function validateAbsolutePath(path: string): { isValid: boolean; error?: string } {
@@ -220,7 +265,7 @@ function validateAbsolutePath(path: string): { isValid: boolean; error?: string 
   if (!isAbsolute) {
     return {
       isValid: false,
-      error: `Only absolute paths are allowed. Got relative path: ${path}\n💡 Hint: Use full path like 'D:\\folder\\image.jpg'`
+      error: `Only absolute paths are allowed. Got relative path: ${path}\n💡 Hint: Use full path like 'D:\\folder\\image.jpg' or use a URL like 'https://example.com/image.jpg'`
     };
   }
   
@@ -230,9 +275,9 @@ function validateAbsolutePath(path: string): { isValid: boolean; error?: string 
 // Register single consolidated generate_ascii_image tool with Supabase upload
 server.tool(
   "generate_ascii_image",
-  "Generate ASCII art from an image and upload to cloud storage. This tool converts an image to ASCII art, renders it as a PNG image with VS Code dark theme styling, uploads to Supabase, and returns the public URL.",
+  "Generate ASCII art from an image and upload to cloud storage. This tool converts an image to ASCII art, renders it as a PNG image with VS Code dark theme styling, uploads to Supabase, and returns the public URL. Supports both local file paths and image URLs.",
   {
-    image_path: z.string().describe("ABSOLUTE path to the input image file (relative paths are not allowed)"),
+    image_path: z.string().describe("ABSOLUTE path to the input image file OR a URL (http/https) to an image"),
     width: z.number().optional().default(100).describe("Width of ASCII art in characters (default: 100, recommended: 80-120 for images)"),
     charset: z.enum(["simple", "detailed", "blocks", "minimal", "matrix"]).optional().default("detailed").describe("Character set to use. Options: 'simple' (basic set), 'detailed' (70+ characters for detail, default), 'blocks' (Unicode blocks), 'minimal' (clean and simple), 'matrix' (Matrix style)"),
     color_mode: z.enum(["gray", "color"]).optional().default("gray").describe("Output mode: 'gray' for grayscale ASCII art (default), 'color' for colored ASCII with original image colors")
@@ -240,23 +285,33 @@ server.tool(
   async ({ image_path, width = 100, charset = "detailed", color_mode = "gray" }) => {
     let tempFilePath: string | null = null;
     try {
-      // Validate absolute path
-      const pathValidation = validateAbsolutePath(image_path);
-      if (!pathValidation.isValid) {
-        return {
-          content: [{ type: "text", text: `❌ Error: ${pathValidation.error}` }]
-        };
+      let imageInput: string | Buffer;
+      let inputBasename: string;
+      
+      // Check if input is a URL
+      if (isValidUrl(image_path)) {
+        // Download image from URL - get buffer directly
+        const downloaded = await downloadImage(image_path);
+        imageInput = downloaded.buffer;
+        inputBasename = downloaded.basename;
+      } else {
+        // Validate absolute path
+        const pathValidation = validateAbsolutePath(image_path);
+        if (!pathValidation.isValid) {
+          return {
+            content: [{ type: "text", text: `❌ Error: ${pathValidation.error}` }]
+          };
+        }
+        imageInput = resolve(image_path);
+        inputBasename = basename(image_path, extname(image_path));
       }
-
-      const inputPath = resolve(image_path);
-      const inputBasename = basename(inputPath, extname(inputPath));
       
       // Create temporary file path
       tempFilePath = join(tmpdir(), `ascii_${randomUUID()}_${inputBasename}.png`);
 
       const charSet = CHAR_SETS[charset as CharSetName];
       const result = await createAsciiImage(
-        inputPath,
+        imageInput,
         tempFilePath,
         width,
         charSet,

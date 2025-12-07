@@ -8,6 +8,8 @@ import os
 import tempfile
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import urlparse
+import httpx
 from mcp.server.fastmcp import FastMCP
 from PIL import Image as PILImage
 from PIL import ImageEnhance, ImageDraw
@@ -58,6 +60,61 @@ def upload_to_supabase(file_path: str, input_basename: str) -> str:
     return public_url
 
 
+def is_valid_url(s: str) -> bool:
+    """Check if string is a valid HTTP/HTTPS URL."""
+    try:
+        result = urlparse(s)
+        return result.scheme in ('http', 'https') and bool(result.netloc)
+    except:
+        return False
+
+
+def download_image(url: str) -> tuple[str, str]:
+    """Download image from URL to temporary file.
+    
+    Args:
+        url: HTTP/HTTPS URL of the image
+        
+    Returns:
+        Tuple of (temp_file_path, basename)
+        
+    Raises:
+        Exception: If download fails or URL doesn't point to an image
+    """
+    with httpx.Client(follow_redirects=True, timeout=30.0) as client:
+        response = client.get(url)
+        response.raise_for_status()
+        
+        content_type = response.headers.get('content-type', '')
+        if not content_type.startswith('image/'):
+            raise Exception(f"URL does not point to an image. Content-Type: {content_type}")
+        
+        # Determine file extension from content-type
+        ext = '.jpg'  # default
+        if 'png' in content_type:
+            ext = '.png'
+        elif 'gif' in content_type:
+            ext = '.gif'
+        elif 'webp' in content_type:
+            ext = '.webp'
+        elif 'jpeg' in content_type or 'jpg' in content_type:
+            ext = '.jpg'
+        elif 'bmp' in content_type:
+            ext = '.bmp'
+        
+        # Extract filename from URL
+        url_path = urlparse(url).path
+        url_filename = url_path.split('/')[-1] if url_path else ''
+        basename = url_filename.rsplit('.', 1)[0] if url_filename else 'image'
+        if not basename:
+            basename = 'image'
+        
+        # Save to temp file with correct extension
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(response.content)
+            return tmp.name, basename
+
+
 @mcp.tool()
 async def generate_ascii_image(
     image_path: str,
@@ -73,9 +130,10 @@ async def generate_ascii_image(
 
     This tool converts an image to ASCII art, renders it as a PNG image with
     VS Code dark theme styling, uploads to Supabase, and returns the public URL.
+    Supports both local file paths and image URLs.
 
     Args:
-        image_path: ABSOLUTE path to the input image file (relative paths are not allowed)
+        image_path: ABSOLUTE path to the input image file OR a URL (http/https) to an image
         width: Width of ASCII art in characters (default: 100, recommended: 80-120 for images)
         charset: Character set to use. Options:
             - 'simple': Basic set ' .:-=+*#%@' (default, best for clarity)
@@ -94,15 +152,25 @@ async def generate_ascii_image(
         Success message with public URL and image dimensions, or error message if failed
     """
     temp_file = None
+    downloaded_file = None
     try:
-        # 验证输入路径必须是绝对路径
-        input_file = Path(image_path)
-        if not input_file.is_absolute():
-            return f"❌ Error: Only absolute paths are allowed. Got relative path: {image_path}\n💡 Hint: Use full path like 'D:\\folder\\image.jpg'"
-        
-        # 验证文件是否存在
-        if not input_file.exists():
-            return f"❌ Error: Image file not found: {image_path}"
+        # Check if input is a URL
+        if is_valid_url(image_path):
+            # Download image from URL
+            downloaded_file, input_basename = download_image(image_path)
+            input_file_path = downloaded_file
+        else:
+            # 验证输入路径必须是绝对路径
+            input_file = Path(image_path)
+            if not input_file.is_absolute():
+                return f"❌ Error: Only absolute paths are allowed. Got relative path: {image_path}\n💡 Hint: Use full path like 'D:\\folder\\image.jpg' or use a URL like 'https://example.com/image.jpg'"
+            
+            # 验证文件是否存在
+            if not input_file.exists():
+                return f"❌ Error: Image file not found: {image_path}"
+            
+            input_file_path = str(input_file)
+            input_basename = input_file.stem
         
         # Create temporary file
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
@@ -112,7 +180,7 @@ async def generate_ascii_image(
         generator = ASCIIArtGenerator(char_set=charset, invert=invert)
         
         # 生成ASCII艺术图片到内存
-        img_original = PILImage.open(str(input_file))
+        img_original = PILImage.open(input_file_path)
         
         # 应用亮度和对比度调整
         if brightness != 1.0:
@@ -199,7 +267,7 @@ async def generate_ascii_image(
         canvas.save(temp_file, format="PNG")
         
         # Upload to Supabase
-        public_url = upload_to_supabase(temp_file, input_file.stem)
+        public_url = upload_to_supabase(temp_file, input_basename)
         
         # 获取文件大小
         file_size_kb = Path(temp_file).stat().st_size / 1024
@@ -210,10 +278,16 @@ async def generate_ascii_image(
         return f"❌ Error: {str(e)}"
     
     finally:
-        # Clean up temporary file
+        # Clean up temporary files
         if temp_file and Path(temp_file).exists():
             try:
                 Path(temp_file).unlink()
+            except:
+                pass
+        # Clean up downloaded file if any
+        if downloaded_file and Path(downloaded_file).exists():
+            try:
+                Path(downloaded_file).unlink()
             except:
                 pass
 
