@@ -1,6 +1,6 @@
 # ASCII Art MCP Server
 
-这是一个给 Claude / MCP 生态用的“图片转 ASCII 艺术”云端工具。
+这是一个给 MCP 生态用的“图片转 ASCII 艺术”云端工具。
 
 - 将本地图片转换为等宽字符的 ASCII 艺术，按 VS Code 深色主题渲染成 PNG。
 - 上传到 Supabase 公网存储并返回可分享的 URL，文件名含 UUID 不会覆盖原有文件。
@@ -83,7 +83,7 @@ uv run ascii_art_server.py
 
 - 仅接受**绝对路径**；相对路径会直接报错。
 
-## 配置示例（Claude Desktop）
+## 配置示例
 
 ### 使用 npm 包（Node.js）
 
